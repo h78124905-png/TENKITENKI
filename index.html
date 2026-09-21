@@ -76,6 +76,7 @@
       font-size: 0.7rem; color: #9ca3af;
       padding: 0 16px 8px; background: #fafbfc;
       border-bottom: 1px solid var(--border);
+      word-break: break-all;
     }
 
     .forecast-row {
@@ -122,7 +123,7 @@
       <h1>雨ナウ</h1>
       <p id="last-updated">最終更新: --:--</p>
       <p id="location-info"></p>
-      <p id="version-info">v9</p>
+      <p id="version-info">v10</p>
     </header>
 
     <div id="summary" class="summary hidden"></div>
@@ -144,7 +145,7 @@
 
   <script>
     // ---- 定数 ----
-    const CACHE_KEY = 'rain-now-cache-v9';
+    const CACHE_KEY = 'rain-now-cache-v10';
     const BASE_NOWC = 'https://www.jma.go.jp/bosai/jmatile/data';
     const TARGET_TIMES_N1 = `${BASE_NOWC}/nowc/targetTimes_N1.json`;
     const ZOOM = 10;
@@ -217,14 +218,14 @@
 
     // ---- 気象庁 降水強度カラースケール（公式8段階） ----
     const PALETTE_NOWCAST = [
-      { r: 242, g: 242, b: 255, v: 0.5 },   // 〜1 mm/h
-      { r: 160, g: 210, b: 255, v: 3 },     // 1〜5
-      { r: 33,  g: 140, b: 255, v: 7.5 },   // 5〜10
-      { r: 0,   g: 65,  b: 255, v: 15 },    // 10〜20
-      { r: 255, g: 245, b: 0,   v: 25 },    // 20〜30
-      { r: 255, g: 153, b: 0,   v: 40 },    // 30〜50
-      { r: 255, g: 40,  b: 0,   v: 65 },    // 50〜80
-      { r: 180, g: 0,   b: 104, v: 100 }    // 80〜
+      { r: 242, g: 242, b: 255, v: 0.5 },
+      { r: 160, g: 210, b: 255, v: 3 },
+      { r: 33,  g: 140, b: 255, v: 7.5 },
+      { r: 0,   g: 65,  b: 255, v: 15 },
+      { r: 255, g: 245, b: 0,   v: 25 },
+      { r: 255, g: 153, b: 0,   v: 40 },
+      { r: 255, g: 40,  b: 0,   v: 65 },
+      { r: 180, g: 0,   b: 104, v: 100 }
     ];
     const PALETTE_KAIKOTAN = [
       { r: 242, g: 242, b: 255, v: 0.5 },
@@ -291,6 +292,15 @@
       const jh = String(jst.getUTCHours()).padStart(2, '0');
       const jm = String(jst.getUTCMinutes()).padStart(2, '0');
       return `${jh}:${jm}`;
+    }
+    function formatStampJst(s) {
+      if (!s || s.length < 12) return '?';
+      const utcMs = Date.UTC(
+        +s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8),
+        +s.slice(8, 10), +s.slice(10, 12)
+      );
+      const jst = new Date(utcMs + 9 * 3600 * 1000);
+      return `${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
     }
     function formatNow() {
       const d = new Date();
@@ -362,6 +372,7 @@
       }
       candidates.sort((a, b) => b.getTime() - a.getTime());
 
+      const attempts = [];
       let chosen = null;
       for (const btDate of candidates) {
         const bt = utcStamp(btDate);
@@ -370,10 +381,14 @@
         const url = `${BASE_NOWC}/rasrf/${bt}/none/${vt}/surf/rasrf/${ZOOM}/${tileX}/${tileY}.png`;
         try {
           const res = await fetch(url, { cache: 'no-store', method: 'GET' });
+          attempts.push(`${bt}:${res.status}`);
           if (res.ok) { chosen = { bt, btDate }; break; }
-        } catch (_) { /* next */ }
+        } catch (e) {
+          attempts.push(`${bt}:ERR`);
+        }
       }
-      if (!chosen) throw new Error('降水短時間予報のタイルが見つかりません');
+      console.log('[rasrf探索]', attempts.join(' | '));
+      if (!chosen) throw new Error('rasrf見つからず: ' + attempts.slice(0, 10).join(', '));
 
       const targets = [];
       for (let h = 1; h <= 6; h++) {
@@ -390,7 +405,11 @@
           } catch (e) {
             console.warn('rasrf tile fail:', url, e.message);
           }
-          return { time: formatValidTime(t.validtime), precip_mm: value };
+          return {
+            time: formatValidTime(t.validtime),
+            precip_mm: value,
+            basetime: t.basetime
+          };
         })
       );
     }
@@ -465,9 +484,11 @@
             <span class="forecast-value">${p.toFixed(1)} mm</span>
           </div>`;
       });
+      const bt = forecast[0]?.basetime || '?';
+      const btJst = formatStampJst(bt);
       extendedCard.innerHTML = `
         <div class="section-title">1〜6時間先の予報</div>
-        <div class="section-note">1時間降水量（mm）。気象庁 降水短時間予報。</div>
+        <div class="section-note">1時間降水量（mm）。気象庁 降水短時間予報。basetime: ${btJst} JST（${bt} UTC）</div>
         ${rows.join('')}
       `;
     }
@@ -526,38 +547,45 @@
 
     // ---- 拡張予報ボタン ----
     extendBtn.addEventListener('click', async () => {
+      // 表示中なら隠すだけ
       if (extendedVisible) {
         extendedVisible = false;
         extendedCard.classList.add('hidden');
         extendBtn.textContent = '＋ 1〜6時間先を見る';
         return;
       }
-      if (!extendedForecast) {
-        if (currentLat == null || currentLon == null) {
-          try {
-            const pos = await getPosition();
-            currentLat = pos.coords.latitude;
-            currentLon = pos.coords.longitude;
-            locationInfoEl.textContent = `📍 ${currentLat.toFixed(4)}, ${currentLon.toFixed(4)}`;
-          } catch (err) {
-            alert('位置情報を取得できません。先に「更新」を押してください。');
-            return;
-          }
-        }
-        extendBtn.disabled = true;
-        extendBtn.textContent = '取得中…';
+
+      // 位置情報が未取得なら取得
+      if (currentLat == null || currentLon == null) {
         try {
-          extendedForecast = await fetchExtendedForecast(currentLat, currentLon);
-          const cached = loadCache() || {};
-          saveCache({ ...cached, extended: extendedForecast, lat: currentLat, lon: currentLon });
-        } catch (e) {
+          const pos = await getPosition();
+          currentLat = pos.coords.latitude;
+          currentLon = pos.coords.longitude;
+          locationInfoEl.textContent = `📍 ${currentLat.toFixed(4)}, ${currentLon.toFixed(4)}`;
+        } catch (err) {
+          alert('位置情報を取得できません。先に「更新」を押してください。');
+          return;
+        }
+      }
+
+      // ★ 常に最新を取得（キャッシュは失敗時のみ使用）
+      extendBtn.disabled = true;
+      extendBtn.textContent = '取得中…';
+      try {
+        extendedForecast = await fetchExtendedForecast(currentLat, currentLon);
+        const cached = loadCache() || {};
+        saveCache({ ...cached, extended: extendedForecast, lat: currentLat, lon: currentLon });
+      } catch (e) {
+        console.warn('拡張予報の取得失敗:', e.message);
+        if (!extendedForecast) {
           extendBtn.disabled = false;
           extendBtn.textContent = '＋ 1〜6時間先を見る';
           alert('1〜6時間先の取得に失敗しました。');
           return;
         }
-        extendBtn.disabled = false;
       }
+      extendBtn.disabled = false;
+
       renderExtended(extendedForecast);
       extendedCard.classList.remove('hidden');
       extendedVisible = true;
