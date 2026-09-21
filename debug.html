@@ -3,168 +3,88 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>雨ナウ デバッグ v3</title>
+  <title>雨ナウ デバッグ v2</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', sans-serif;
-      background: #f5f7fa;
-      color: #1a1a2e;
-      padding: 16px;
-      line-height: 1.5;
-      font-size: 14px;
+      background: #f5f7fa; color: #1a1a2e; padding: 16px; line-height: 1.5; font-size: 14px;
     }
     h1 { font-size: 1.2rem; margin-bottom: 12px; }
     button {
-      display: block;
-      width: 100%;
-      padding: 12px;
-      font-size: 1rem;
-      font-weight: 600;
-      color: #fff;
-      background: #0066cc;
-      border: none;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      cursor: pointer;
+      display: block; width: 100%; padding: 12px; font-size: 1rem; font-weight: 600;
+      color: #fff; background: #0066cc; border: none; border-radius: 8px;
+      margin-bottom: 12px; cursor: pointer;
     }
     button:active { opacity: 0.8; }
     button:disabled { background: #9ca3af; }
-    button.secondary {
-      background: #fff;
-      color: #0066cc;
-      border: 1.5px solid #0066cc;
+    button.secondary { background: #fff; color: #0066cc; border: 1.5px solid #0066cc; }
+    .out {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 12px; margin-bottom: 12px;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 12px; white-space: pre-wrap; word-break: break-all;
+      max-height: 400px; overflow-y: auto;
     }
-    .coord-box {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 16px;
-    }
-    .coord-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .coord-row label {
-      flex: 0 0 40px;
-      font-size: 0.85rem;
-      color: #6b7280;
-      align-self: center;
-    }
+    .ok { color: #059669; font-weight: 700; }
+    .ng { color: #dc2626; font-weight: 700; }
+    .warn { color: #d97706; font-weight: 700; }
+    .label { color: #6b7280; font-size: 11px; text-transform: uppercase; }
+    .coord-row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .coord-row label { flex: 0 0 40px; font-size: 0.85rem; color: #6b7280; align-self: center; }
     .coord-row input {
-      flex: 1;
-      padding: 8px 10px;
-      font-size: 1rem;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-variant-numeric: tabular-nums;
+      flex: 1; padding: 8px 10px; font-size: 1rem;
+      border: 1px solid #d1d5db; border-radius: 6px; font-variant-numeric: tabular-nums;
     }
-    .presets {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-    }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
     .preset {
-      font-size: 0.75rem;
-      padding: 4px 10px;
-      background: #eff6ff;
-      color: #0066cc;
-      border: 1px solid #bfdbfe;
-      border-radius: 12px;
-      cursor: pointer;
+      font-size: 0.75rem; padding: 4px 10px; background: #eff6ff;
+      color: #0066cc; border: 1px solid #bfdbfe; border-radius: 12px; cursor: pointer;
     }
     .preset:active { background: #dbeafe; }
-    .out {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 12px;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    .label { color: #6b7280; font-size: 11px; text-transform: uppercase; }
-    .swatch {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      vertical-align: middle;
-      border: 1px solid #000;
-      margin-right: 4px;
-    }
-    .color-line {
-      display: flex;
-      align-items: center;
-      padding: 3px 0;
-      gap: 8px;
-      font-family: ui-monospace, monospace;
-      font-size: 12px;
-    }
   </style>
 </head>
 <body>
-  <h1>雨ナウ デバッグ v3</h1>
+  <h1>雨ナウ デバッグ v2</h1>
 
-  <div class="coord-box">
-    <div class="coord-row">
-      <label>緯度</label>
-      <input id="input-lat" type="number" step="0.0001" value="35.6812" />
-    </div>
-    <div class="coord-row">
-      <label>経度</label>
-      <input id="input-lon" type="number" step="0.0001" value="139.7671" />
-    </div>
-    <button id="btn-geo" class="secondary" style="margin-bottom:8px;">📍 現在地を取得</button>
-    <div class="presets">
-      <span class="preset" data-lat="35.6812" data-lon="139.7671">東京</span>
-      <span class="preset" data-lat="34.6937" data-lon="135.5023">大阪</span>
-      <span class="preset" data-lat="35.1815" data-lon="136.9066">名古屋</span>
-      <span class="preset" data-lat="43.0618" data-lon="141.3545">札幌</span>
-      <span class="preset" data-lat="33.5904" data-lon="130.4017">福岡</span>
-      <span class="preset" data-lat="38.2682" data-lon="140.8694">仙台</span>
-      <span class="preset" data-lat="26.2124" data-lon="127.6809">那覇</span>
-    </div>
+  <div class="coord-row">
+    <label>緯度</label>
+    <input id="input-lat" type="number" step="0.0001" value="35.6812" />
+  </div>
+  <div class="coord-row">
+    <label>経度</label>
+    <input id="input-lon" type="number" step="0.0001" value="139.7671" />
+  </div>
+  <button id="btn-geo" class="secondary" style="margin-bottom:8px;">📍 現在地を取得</button>
+  <div class="presets">
+    <span class="preset" data-lat="35.6812" data-lon="139.7671">東京</span>
+    <span class="preset" data-lat="34.6937" data-lon="135.5023">大阪</span>
+    <span class="preset" data-lat="35.1815" data-lon="136.9066">名古屋</span>
+    <span class="preset" data-lat="43.0618" data-lon="141.3545">札幌</span>
+    <span class="preset" data-lat="33.5904" data-lon="130.4017">福岡</span>
+    <span class="preset" data-lat="38.2682" data-lon="140.8694">仙台</span>
+    <span class="preset" data-lat="26.2124" data-lon="127.6809">那覇</span>
   </div>
 
-  <button id="btn-times">⓪ targetTimes_N1.json の中身を見る</button>
-  <div id="out-times" class="out">未実行</div>
-
-  <button id="btn-cors">① CORSヘッダーを確認</button>
-  <div id="out-cors" class="out">未実行</div>
-
-  <button id="btn-blob">② Blob経由でピクセルを読む（最新の未来タイル）</button>
-  <div id="out-blob" class="out">未実行</div>
-
-  <button id="btn-extract">③ Blob経由で色を抽出（現在のタイル）</button>
-  <div id="out-extract" class="out">未実行</div>
-
-  <button id="btn-timeline">④ ナウキャスト 10分×7枚 タイムライン</button>
-  <div id="out-timeline" class="out">未実行</div>
-
-  <button id="btn-rasrf">⑤ rasrf（1〜6時間先）のURL探索</button>
+  <button id="btn-fetch-rasrf">🔍 rasrf タイルURLを捕捉（最重要）</button>
   <div id="out-rasrf" class="out">未実行</div>
 
-  <script>
-    const ZOOM = 10;
-    const BASE = 'https://www.jma.go.jp/bosai/jmatile/data';
+  <button id="btn-fetch-targettimes">📋 利用可能なtargetTimesを探す</button>
+  <div id="out-targettimes" class="out">未実行</div>
 
-    // ---- 座標取得ヘルパー ----
+  <button id="btn-test-rasrf">🧪 rasrfタイルを実際に取得してみる</button>
+  <div id="out-test" class="out">未実行</div>
+
+  <script>
+    const BASE = 'https://www.jma.go.jp/bosai/jmatile/data';
+    const ZOOM = 10;
+
     function getCoords() {
       const lat = parseFloat(document.getElementById('input-lat').value);
       const lon = parseFloat(document.getElementById('input-lon').value);
-      if (isNaN(lat) || isNaN(lon)) {
-        throw new Error('緯度・経度を正しく入力してください');
-      }
+      if (isNaN(lat) || isNaN(lon)) throw new Error('緯度・経度を正しく入力してください');
       return { lat, lon };
     }
 
-    // ---- プリセット ----
     document.querySelectorAll('.preset').forEach((el) => {
       el.addEventListener('click', () => {
         document.getElementById('input-lat').value = el.dataset.lat;
@@ -172,12 +92,8 @@
       });
     });
 
-    // ---- 現在地取得 ----
     document.getElementById('btn-geo').addEventListener('click', () => {
-      if (!navigator.geolocation) {
-        alert('この端末では位置情報を利用できません');
-        return;
-      }
+      if (!navigator.geolocation) { alert('位置情報を利用できません'); return; }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           document.getElementById('input-lat').value = pos.coords.latitude.toFixed(4);
@@ -188,15 +104,16 @@
       );
     });
 
-    // ---- ユーティリティ ----
-    function lonLatToTileExact(lon, lat, z) {
+    function lonLatToTile(lon, lat, z) {
       const n = 2 ** z;
-      const xExact = ((lon + 180) / 360) * n;
+      const x = Math.floor(((lon + 180) / 360) * n);
       const latRad = (lat * Math.PI) / 180;
-      const yExact =
-        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
-      return { xExact, yExact };
+      const y = Math.floor(
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+      );
+      return { x, y };
     }
+
     function utcStamp(d) {
       return (
         String(d.getUTCFullYear()) +
@@ -207,314 +124,182 @@
         String(d.getUTCSeconds()).padStart(2, '0')
       );
     }
-    function parseUtcStamp(s) {
-      return new Date(Date.UTC(
-        +s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8),
-        +s.slice(8, 10), +s.slice(10, 12), +(s.slice(12, 14) || 0)
-      ));
-    }
-    function formatJst(utcStampStr) {
-      const utcMs = Date.UTC(
-        +utcStampStr.slice(0, 4), +utcStampStr.slice(4, 6) - 1, +utcStampStr.slice(6, 8),
-        +utcStampStr.slice(8, 10), +utcStampStr.slice(10, 12)
-      );
-      const jst = new Date(utcMs + 9 * 3600 * 1000);
-      return (
-        String(jst.getUTCHours()).padStart(2, '0') + ':' +
-        String(jst.getUTCMinutes()).padStart(2, '0')
-      );
-    }
-
-    // ---- Blob経由で画像を読み込み、ピクセルを取得 ----
-    async function readPixelBlob(url, px, py) {
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        const img = await new Promise((resolve, reject) => {
-          const i = new Image();
-          i.onload = () => resolve(i);
-          i.onerror = () => reject(new Error('img load failed'));
-          i.src = objectUrl;
-        });
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-        return ctx.getImageData(px, py, 1, 1).data;
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-    }
 
     // ============================================================
-    // ⓪ targetTimes の中身
+    // ① rasrf タイルURLを捕捉
     // ============================================================
-    document.getElementById('btn-times').addEventListener('click', async () => {
-      const out = document.getElementById('out-times');
-      out.textContent = '取得中…';
-      try {
-        const url = `${BASE}/nowc/targetTimes_N1.json`;
-        const res = await fetch(url, { cache: 'no-store' });
-        const text = await res.text();
-        const json = JSON.parse(text);
-        const latest = json.reduce((a, b) => (a.basetime > b.basetime ? a : b));
-        const oldest = json.reduce((a, b) => (a.basetime < b.basetime ? a : b));
-
-        out.textContent =
-          `件数: ${json.length}\n` +
-          `最新 basetime: ${latest.basetime} (JST ${formatJst(latest.basetime)})\n` +
-          `最古 basetime: ${oldest.basetime} (JST ${formatJst(oldest.basetime)})\n` +
-          `先頭3件:\n` +
-          json.slice(0, 3).map((t, i) => `  [${i}] ${JSON.stringify(t)}`).join('\n');
-      } catch (e) {
-        out.textContent = `❌ ${e.message}`;
-      }
-    });
-
-    // ============================================================
-    // ① CORS ヘッダー
-    // ============================================================
-    document.getElementById('btn-cors').addEventListener('click', async () => {
-      const out = document.getElementById('out-cors');
-      out.textContent = '取得中…';
-      try {
-        const { lat, lon } = getCoords();
-        const times = await (await fetch(`${BASE}/nowc/targetTimes_N1.json`, { cache: 'no-store' })).json();
-        const latest = times.reduce((a, b) => (a.basetime > b.basetime ? a : b));
-        const bt = latest.basetime;
-        const vtDate = new Date(parseUtcStamp(bt).getTime() + 10 * 60 * 1000);
-        const vt = utcStamp(vtDate);
-
-        const { xExact, yExact } = lonLatToTileExact(lon, lat, ZOOM);
-        const x = Math.floor(xExact);
-        const y = Math.floor(yExact);
-        const url = `${BASE}/nowc/${bt}/none/${vt}/surf/hrpns/${ZOOM}/${x}/${y}.png`;
-
-        const res = await fetch(url, { cache: 'no-store' });
-        const lines = [
-          `URL: ${url}`,
-          `HTTP: ${res.status}`,
-          `type: ${res.type}`,
-          '',
-          '--- ヘッダー ---'
-        ];
-        let hasCors = false;
-        for (const [k, v] of res.headers.entries()) {
-          lines.push(`${k}: ${v}`);
-          if (k.toLowerCase() === 'access-control-allow-origin') hasCors = true;
-        }
-        lines.push('');
-        lines.push(hasCors ? '✅ ACAO あり' : '❌ ACAO なし（Blob経由で回避）');
-        out.textContent = lines.join('\n');
-      } catch (e) {
-        out.textContent = `❌ ${e.message}`;
-      }
-    });
-
-    // ============================================================
-    // ② Blob経由でピクセル読み取り
-    // ============================================================
-    document.getElementById('btn-blob').addEventListener('click', async () => {
-      const out = document.getElementById('out-blob');
-      out.textContent = '取得中…';
-      try {
-        const { lat, lon } = getCoords();
-        const times = await (await fetch(`${BASE}/nowc/targetTimes_N1.json`, { cache: 'no-store' })).json();
-        const latest = times.reduce((a, b) => (a.basetime > b.basetime ? a : b));
-        const bt = latest.basetime;
-        const vtDate = new Date(parseUtcStamp(bt).getTime() + 10 * 60 * 1000);
-        const vt = utcStamp(vtDate);
-
-        const { xExact, yExact } = lonLatToTileExact(lon, lat, ZOOM);
-        const tileX = Math.floor(xExact);
-        const tileY = Math.floor(yExact);
-        const px = Math.floor((xExact - tileX) * 256);
-        const py = Math.floor((yExact - tileY) * 256);
-        const url = `${BASE}/nowc/${bt}/none/${vt}/surf/hrpns/${ZOOM}/${tileX}/${tileY}.png`;
-
-        const data = await readPixelBlob(url, px, py);
-        out.textContent =
-          `座標: ${lat}, ${lon}\n` +
-          `basetime: ${bt} (JST ${formatJst(bt)})\n` +
-          `validtime: ${vt} (JST ${formatJst(vt)})\n` +
-          `タイル: ${ZOOM}/${tileX}/${tileY}\n` +
-          `ピクセル: (${px}, ${py})\n` +
-          `RGBA: (${data[0]}, ${data[1]}, ${data[2]}, ${data[3]})\n\n` +
-          (data[3] === 0 ? '→ 透明（降水なし）' : '→ 色あり（降水の可能性）') +
-          '\n\n✅ Blob経由で成功';
-      } catch (e) {
-        out.textContent = `❌ ${e.message}`;
-      }
-    });
-
-    // ============================================================
-    // ③ 色を抽出
-    // ============================================================
-    document.getElementById('btn-extract').addEventListener('click', async () => {
-      const out = document.getElementById('out-extract');
-      out.textContent = '取得中…';
-      try {
-        const { lat, lon } = getCoords();
-        const times = await (await fetch(`${BASE}/nowc/targetTimes_N1.json`, { cache: 'no-store' })).json();
-        const latest = times.reduce((a, b) => (a.basetime > b.basetime ? a : b));
-        const bt = latest.basetime;
-        const vtDate = new Date(parseUtcStamp(bt).getTime() + 10 * 60 * 1000);
-        const vt = utcStamp(vtDate);
-
-        const { xExact, yExact } = lonLatToTileExact(lon, lat, ZOOM);
-        const x = Math.floor(xExact);
-        const y = Math.floor(yExact);
-        const url = `${BASE}/nowc/${bt}/none/${vt}/surf/hrpns/${ZOOM}/${x}/${y}.png`;
-
-        const res = await fetch(url, { cache: 'no-store' });
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const img = await new Promise((resolve, reject) => {
-          const i = new Image();
-          i.onload = () => resolve(i);
-          i.onerror = () => reject(new Error('img load failed'));
-          i.src = objectUrl;
-        });
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, img.width, img.height).data;
-        URL.revokeObjectURL(objectUrl);
-
-        const counts = new Map();
-        for (let i = 0; i < data.length; i += 4) {
-          const a = data[i + 3];
-          if (a === 0) continue;
-          const key = `${data[i]},${data[i + 1]},${data[i + 2]}`;
-          counts.set(key, (counts.get(key) || 0) + 1);
-        }
-        const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
-
-        let html =
-          `<div class="label">URL: ${url}</div>` +
-          `<div class="label">非透明色の種類: ${counts.size}</div><br>`;
-        if (sorted.length === 0) {
-          html += '（このタイルは全面透明＝降水なし）';
-        } else {
-          for (const [rgb, count] of sorted) {
-            const [r, g, b] = rgb.split(',').map(Number);
-            html += `<div class="color-line">` +
-              `<span class="swatch" style="background:rgb(${r},${g},${b})"></span>` +
-              `RGB(${r},${g},${b}) × ${count}</div>`;
-          }
-        }
-        out.innerHTML = html;
-      } catch (e) {
-        out.textContent = `❌ ${e.message}`;
-      }
-    });
-
-    // ============================================================
-    // ④ ナウキャスト タイムライン（10分×7枚）
-    // ============================================================
-    document.getElementById('btn-timeline').addEventListener('click', async () => {
-      const out = document.getElementById('out-timeline');
-      out.textContent = '取得中…';
-      const lines = [];
-      try {
-        const { lat, lon } = getCoords();
-        const times = await (await fetch(`${BASE}/nowc/targetTimes_N1.json`, { cache: 'no-store' })).json();
-        const latest = times.reduce((a, b) => (a.basetime > b.basetime ? a : b));
-        const bt = latest.basetime;
-        const btDate = parseUtcStamp(bt);
-
-        const { xExact, yExact } = lonLatToTileExact(lon, lat, ZOOM);
-        const tileX = Math.floor(xExact);
-        const tileY = Math.floor(yExact);
-        const px = Math.floor((xExact - tileX) * 256);
-        const py = Math.floor((yExact - tileY) * 256);
-
-        lines.push(`basetime: ${bt} (JST ${formatJst(bt)})`);
-        lines.push(`座標: ${lat}, ${lon}  タイル: ${ZOOM}/${tileX}/${tileY}`);
-        lines.push('');
-
-        for (let n = 0; n <= 60; n += 10) {
-          const vt = utcStamp(new Date(btDate.getTime() + n * 60 * 1000));
-          const url = `${BASE}/nowc/${bt}/none/${vt}/surf/hrpns/${ZOOM}/${tileX}/${tileY}.png`;
-          try {
-            const data = await readPixelBlob(url, px, py);
-            lines.push(`+${String(n).padStart(2)}分  JST ${formatJst(vt)}  RGBA(${data[0]},${data[1]},${data[2]},${data[3]})`);
-          } catch (e) {
-            lines.push(`+${String(n).padStart(2)}分  JST ${formatJst(vt)}  ❌ ${e.message}`);
-          }
-        }
-        out.textContent = lines.join('\n');
-      } catch (e) {
-        out.textContent = `❌ ${e.message}`;
-      }
-    });
-
-    // ============================================================
-    // ⑤ rasrf URL探索
-    // ============================================================
-    document.getElementById('btn-rasrf').addEventListener('click', async () => {
+    document.getElementById('btn-fetch-rasrf').addEventListener('click', async () => {
       const out = document.getElementById('out-rasrf');
-      out.textContent = '取得中…';
+      out.textContent = '調査中…';
       const lines = [];
+
       try {
         const { lat, lon } = getCoords();
-        const { xExact, yExact } = lonLatToTileExact(lon, lat, ZOOM);
-        const x = Math.floor(xExact);
-        const y = Math.floor(yExact);
-        const now = new Date();
-        const baseMs = Math.floor(now.getTime() / 3600000) * 3600000;
+        const { x, y } = lonLatToTile(lon, lat, ZOOM);
 
-        const candidates = [];
-        for (let h = 0; h <= 8; h++) {
-          for (const m of [0, 30]) {
-            const ms = baseMs - h * 3600000 + m * 60000;
-            if (ms > now.getTime()) continue;
-            candidates.push(new Date(ms));
-          }
-        }
-        candidates.sort((a, b) => b.getTime() - a.getTime());
-
-        lines.push(`座標: ${lat}, ${lon}  タイル: ${ZOOM}/${x}/${y}`);
+        lines.push(`座標: ${lat}, ${lon}`);
+        lines.push(`タイル: ${ZOOM}/${x}/${y}`);
         lines.push('');
-        let found = null;
-        for (const btDate of candidates) {
+
+        // 候補1: targetTimes_rasrf.json
+        lines.push('--- 候補1: targetTimes_rasrf.json ---');
+        try {
+          const res = await fetch(`${BASE}/rasrf/targetTimes_rasrf.json`, { cache: 'no-store' });
+          lines.push(`HTTP ${res.status}`);
+          if (res.ok) {
+            const json = await res.json();
+            lines.push(`✅ 取得成功！件数: ${json.length}`);
+            lines.push(`先頭3件:`);
+            json.slice(0, 3).forEach((t, i) => lines.push(`  [${i}] ${JSON.stringify(t)}`));
+          }
+        } catch (e) { lines.push(`❌ ${e.message}`); }
+        lines.push('');
+
+        // 候補2: targetTimes.json
+        lines.push('--- 候補2: rasrf/targetTimes.json ---');
+        try {
+          const res = await fetch(`${BASE}/rasrf/targetTimes.json`, { cache: 'no-store' });
+          lines.push(`HTTP ${res.status}`);
+          if (res.ok) {
+            const json = await res.json();
+            lines.push(`✅ 取得成功！件数: ${json.length}`);
+            lines.push(`先頭3件:`);
+            json.slice(0, 3).forEach((t, i) => lines.push(`  [${i}] ${JSON.stringify(t)}`));
+          }
+        } catch (e) { lines.push(`❌ ${e.message}`); }
+        lines.push('');
+
+        // 候補3: 現在時刻から推測してURLを生成
+        lines.push('--- 候補3: 推測URLの存在確認 ---');
+        const now = new Date();
+        const baseHourMs = Math.floor(now.getTime() / 3600000) * 3600000;
+
+        for (let h = 0; h <= 3; h++) {
+          const btDate = new Date(baseHourMs - h * 3600000);
           const bt = utcStamp(btDate);
-          const vt = utcStamp(new Date(btDate.getTime() + 3600000));
+          const vtDate = new Date(btDate.getTime() + 3600000);
+          const vt = utcStamp(vtDate);
           const url = `${BASE}/rasrf/${bt}/none/${vt}/surf/rasrf/${ZOOM}/${x}/${y}.png`;
+
           try {
             const res = await fetch(url, { cache: 'no-store', method: 'HEAD' });
+            lines.push(`bt=${bt} → HTTP ${res.status} ${res.ok ? '✅' : '❌'}`);
+          } catch (e) {
+            lines.push(`bt=${bt} → ❌ ${e.message}`);
+          }
+        }
+
+        out.textContent = lines.join('\n');
+      } catch (e) {
+        out.textContent = `❌ ${e.message}`;
+      }
+    });
+
+    // ============================================================
+    // ② 利用可能なtargetTimesを探す
+    // ============================================================
+    document.getElementById('btn-fetch-targettimes').addEventListener('click', async () => {
+      const out = document.getElementById('out-targettimes');
+      out.textContent = '調査中…';
+      const lines = [];
+
+      const urls = [
+        `${BASE}/rasrf/targetTimes_rasrf.json`,
+        `${BASE}/rasrf/targetTimes.json`,
+        `${BASE}/nowc/targetTimes_N1.json`,
+        `${BASE}/nowc/targetTimes_N2.json`,
+        `${BASE}/kaikotan/targetTimes.json`,
+      ];
+
+      for (const url of urls) {
+        lines.push(`--- ${url} ---`);
+        try {
+          const res = await fetch(url, { cache: 'no-store' });
+          lines.push(`HTTP ${res.status}`);
+          if (res.ok) {
+            const text = await res.text();
+            lines.push(`レスポンス長: ${text.length}`);
+            lines.push(`先頭200文字: ${text.slice(0, 200)}`);
+          }
+        } catch (e) { lines.push(`❌ ${e.message}`); }
+        lines.push('');
+      }
+
+      out.textContent = lines.join('\n');
+    });
+
+    // ============================================================
+    // ③ rasrfタイルを実際に取得してみる
+    // ============================================================
+    document.getElementById('btn-test-rasrf').addEventListener('click', async () => {
+      const out = document.getElementById('out-test');
+      out.textContent = '取得中…';
+      const lines = [];
+
+      try {
+        const { lat, lon } = getCoords();
+        const { x, y } = lonLatToTile(lon, lat, ZOOM);
+
+        // targetTimesから最新basetimeを取得（あれば）
+        let basetime = null;
+        try {
+          const res = await fetch(`${BASE}/rasrf/targetTimes_rasrf.json`, { cache: 'no-store' });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.length > 0) {
+              basetime = json.reduce((a, b) => (a.basetime > b.basetime ? a : b)).basetime;
+              lines.push(`targetTimes_rasrf.jsonからbasetime: ${basetime}`);
+            }
+          }
+        } catch (_) { /* ignore */ }
+
+        if (!basetime) {
+          const now = new Date();
+          const baseHourMs = Math.floor(now.getTime() / 3600000) * 3600000;
+          basetime = utcStamp(new Date(baseHourMs - 3 * 3600000));
+          lines.push(`推測basetime: ${basetime}`);
+        }
+
+        const btDate = new Date(Date.UTC(
+          +basetime.slice(0, 4), +basetime.slice(4, 6) - 1, +basetime.slice(6, 8),
+          +basetime.slice(8, 10), +basetime.slice(10, 12), +(basetime.slice(12, 14) || 0)
+        ));
+
+        lines.push(`タイル座標: ${ZOOM}/${x}/${y}`);
+        lines.push('');
+
+        for (let h = 1; h <= 6; h++) {
+          const vtDate = new Date(btDate.getTime() + h * 3600000);
+          const vt = utcStamp(vtDate);
+          const url = `${BASE}/rasrf/${basetime}/none/${vt}/surf/rasrf/${ZOOM}/${x}/${y}.png`;
+
+          try {
+            const res = await fetch(url, { cache: 'no-store' });
+            lines.push(`+${h}h  ${vt}  HTTP ${res.status}  ${res.ok ? '✅' : '❌'}`);
+
             if (res.ok) {
-              lines.push(`✅ basetime=${bt} (JST ${formatJst(bt)}) valid=${vt} (JST ${formatJst(vt)})`);
-              found = { bt, btDate };
-              break;
-            } else {
-              lines.push(`❌ ${bt} → HTTP ${res.status}`);
+              const blob = await res.blob();
+              const objectUrl = URL.createObjectURL(blob);
+              try {
+                const img = await new Promise((resolve, reject) => {
+                  const i = new Image();
+                  i.onload = () => resolve(i);
+                  i.onerror = () => reject(new Error('img fail'));
+                  i.src = objectUrl;
+                });
+                const canvas = document.createElement('canvas');
+                canvas.width = 256; canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const data = ctx.getImageData(128, 128, 1, 1).data;
+                lines.push(`   RGBA(${data[0]},${data[1]},${data[2]},${data[3]})`);
+              } finally { URL.revokeObjectURL(objectUrl); }
             }
           } catch (e) {
-            lines.push(`❌ ${bt} → ${e.message}`);
+            lines.push(`+${h}h  ${vt}  ❌ ${e.message}`);
           }
         }
-        if (found) {
-          lines.push('');
-          lines.push('--- 1〜6時間先のRGBA ---');
-          for (let h = 1; h <= 6; h++) {
-            const vt = utcStamp(new Date(found.btDate.getTime() + h * 3600000));
-            const url = `${BASE}/rasrf/${found.bt}/none/${vt}/surf/rasrf/${ZOOM}/${x}/${y}.png`;
-            const px = Math.floor((xExact - x) * 256);
-            const py = Math.floor((yExact - y) * 256);
-            try {
-              const data = await readPixelBlob(url, px, py);
-              lines.push(`+${h}h  JST ${formatJst(vt)}  RGBA(${data[0]},${data[1]},${data[2]},${data[3]})`);
-            } catch (e) {
-              lines.push(`+${h}h  JST ${formatJst(vt)}  ❌ ${e.message}`);
-            }
-          }
-        }
+
         out.textContent = lines.join('\n');
       } catch (e) {
         out.textContent = `❌ ${e.message}`;
