@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>雨ナウ デバッグ</title>
+  <title>雨ナウ デバッグ v2</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', sans-serif;
@@ -66,30 +66,31 @@
   </style>
 </head>
 <body>
-  <h1>雨ナウ デバッグ</h1>
+  <h1>雨ナウ デバッグ v2</h1>
 
   <p style="font-size:12px;color:#6b7280;margin-bottom:16px;">
-    気象庁タイルの CORS と色パレットを実機で確認するためのページです。
+    Blob経由の読み取りと、targetTimes_N1.json の中身確認用。
   </p>
+
+  <button id="btn-times">⓪ targetTimes_N1.json の中身を見る</button>
+  <div id="out-times" class="out">未実行</div>
 
   <button id="btn-cors">① CORSヘッダーを確認</button>
   <div id="out-cors" class="out">未実行</div>
 
-  <button id="btn-extract">② タイルから色を抽出</button>
+  <button id="btn-blob">② Blob経由でピクセルを読む</button>
+  <div id="out-blob" class="out">未実行</div>
+
+  <button id="btn-extract">③ Blob経由で色を抽出</button>
   <div id="out-extract" class="out">未実行</div>
 
-  <button id="btn-test-pixel">③ 特定ピクセルを読み取る</button>
-  <div id="out-pixel" class="out">未実行</div>
-
   <script>
-    // ---- 座標（真庭市役所付近。任意で書き換え） ----
+    // ---- 座標（真庭市役所付近） ----
     const LAT = 35.0756;
     const LON = 133.7528;
     const ZOOM = 10;
-
     const BASE = 'https://www.jma.go.jp/bosai/jmatile/data';
 
-    // ---- 緯度経度 → タイル座標 ----
     function lonLatToTileExact(lon, lat, z) {
       const n = 2 ** z;
       const xExact = ((lon + 180) / 360) * n;
@@ -110,103 +111,188 @@
       );
     }
 
-    // ---- ナウキャストの最新タイルURLを組み立てる ----
-    async function buildNowcastUrl() {
-      const res = await fetch(`${BASE}/nowc/targetTimes_N1.json`, { cache: 'no-store' });
-      const times = await res.json();
-      const nowUtc = utcStamp(new Date());
-      const candidates = times
-        .filter((t) => t.validtime >= nowUtc && t.elements?.includes('hrpns'))
-        .sort((a, b) => a.validtime.localeCompare(b.validtime));
-      if (candidates.length === 0) throw new Error('未来のナウキャスト時刻がありません');
-      const t = candidates[0];
-      const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
-      const x = Math.floor(xExact);
-      const y = Math.floor(yExact);
-      const url = `${BASE}/nowc/${t.basetime}/none/${t.validtime}/surf/hrpns/${ZOOM}/${x}/${y}.png`;
-      return { url, tileX: x, tileY: y, validtime: t.validtime };
-    }
+    // ============================================================
+    // ⓪ targetTimes_N1.json の中身を見る
+    // ============================================================
+    document.getElementById('btn-times').addEventListener('click', async () => {
+      const out = document.getElementById('out-times');
+      out.textContent = '取得中…';
+      const lines = [];
+      try {
+        const url = `${BASE}/nowc/targetTimes_N1.json`;
+        lines.push(`URL: ${url}`);
+        lines.push('');
+        const res = await fetch(url, { cache: 'no-store' });
+        lines.push(`HTTPステータス: ${res.status}`);
+        lines.push(`Content-Type: ${res.headers.get('content-type') ?? '（なし）'}`);
+        lines.push('');
 
-    // ---- rasrf の候補URLを組み立てる（30分刻みで探索） ----
-    function buildRasrfCandidates() {
-      const now = new Date();
-      const baseMs = Date.UTC(
-        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
-        now.getUTCHours(), 0, 0
-      );
-      const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
-      const x = Math.floor(xExact);
-      const y = Math.floor(yExact);
+        const text = await res.text();
+        lines.push(`レスポンス長: ${text.length} 文字`);
+        lines.push('');
+        lines.push('--- 先頭500文字 ---');
+        lines.push(text.slice(0, 500));
+        lines.push('');
+        lines.push('--- 末尾200文字 ---');
+        lines.push(text.slice(-200));
 
-      const candidates = [];
-      for (let offset = 0; offset <= 6; offset++) {
-        const ms = baseMs - offset * 30 * 60 * 1000;
-        const rounded = new Date(Math.floor(ms / (30 * 60 * 1000)) * 30 * 60 * 1000);
-        const bt = utcStamp(rounded);
-        const v1 = utcStamp(new Date(rounded.getTime() + 1 * 3600 * 1000));
-        const url = `${BASE}/rasrf/${bt}/none/${v1}/surf/rasrf/${ZOOM}/${x}/${y}.png`;
-        candidates.push({ url, basetime: bt, validtime: v1, tileX: x, tileY: y });
+        // JSONとしてパースを試みる
+        try {
+          const json = JSON.parse(text);
+          lines.push('');
+          lines.push(`✅ JSONパース成功: 型=${Array.isArray(json) ? '配列' : typeof json}`);
+          if (Array.isArray(json)) {
+            lines.push(`件数: ${json.length}`);
+            if (json.length > 0) {
+              lines.push(`先頭3件:`);
+              json.slice(0, 3).forEach((t, i) => {
+                lines.push(`  [${i}] ${JSON.stringify(t)}`);
+              });
+              const tenses = [...new Set(json.map((t) => t.tense))];
+              const elements = [...new Set(json.flatMap((t) => t.elements || []))];
+              lines.push(`tense一覧: ${tenses.join(', ')}`);
+              lines.push(`elements一覧: ${elements.join(', ')}`);
+            }
+          }
+        } catch (e) {
+          lines.push('');
+          lines.push(`❌ JSONパース失敗: ${e.message}`);
+        }
+
+        out.textContent = lines.join('\n');
+      } catch (e) {
+        out.innerHTML = `❌ fetchエラー: ${e.message}\n（CORSまたはネットワーク問題）`;
       }
-      return candidates;
-    }
+    });
 
     // ============================================================
-    // ① CORS ヘッダー確認
+    // ① CORSヘッダーを確認
     // ============================================================
     document.getElementById('btn-cors').addEventListener('click', async () => {
       const out = document.getElementById('out-cors');
-      out.textContent = '実行中…';
+      out.textContent = '取得中…';
       const lines = [];
-
       try {
-        const { url } = await buildNowcastUrl();
+        // targetTimesが動かない場合に備えて、実際に存在するタイルURLを使う
+        const now = new Date();
+        const base = new Date(Date.UTC(
+          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+          now.getUTCHours() - 1, 0, 0
+        ));
+        const bt = utcStamp(base);
+        const vt = bt;
+        const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
+        const x = Math.floor(xExact);
+        const y = Math.floor(yExact);
+        const url = `${BASE}/nowc/${bt}/none/${vt}/surf/hrpns/${ZOOM}/${x}/${y}.png`;
+
         lines.push(`URL: ${url}`);
         lines.push('');
 
-        // fetch でヘッダーを見る
         const res = await fetch(url, { cache: 'no-store' });
         lines.push(`HTTPステータス: ${res.status}`);
+        lines.push(`type: ${res.type}`);
         lines.push('');
-
         lines.push('--- レスポンスヘッダー ---');
         let hasCors = false;
         for (const [k, v] of res.headers.entries()) {
           lines.push(`${k}: ${v}`);
           if (k.toLowerCase() === 'access-control-allow-origin') hasCors = true;
         }
-
         lines.push('');
         if (hasCors) {
           lines.push('✅ Access-Control-Allow-Origin あり');
         } else {
-          lines.push('❌ Access-Control-Allow-Origin なし（CORS非対応の可能性）');
+          lines.push('❌ Access-Control-Allow-Origin なし');
+          lines.push('→ canvas getImageData は SecurityError になる');
+          lines.push('→ Blob経由の読み取りで回避可能');
         }
-        lines.push('');
-        lines.push('※ ブラウザのfetchはCORSモード。imgタグで読む場合もcrossOriginで同様の扱いになる。');
-        out.innerHTML = lines.join('\n');
+        out.textContent = lines.join('\n');
       } catch (e) {
-        out.innerHTML = `❌ エラー: ${e.message}\n\n` +
-          `※ CORSで弾かれた場合、fetch自体がTypeErrorで失敗する。\n` +
-          `  → タイルはimgタグで表示できるが、canvasでgetImageDataはできない。`;
+        out.innerHTML = `❌ fetchエラー: ${e.message}`;
       }
     });
 
     // ============================================================
-    // ② タイルから色を抽出
+    // ② Blob経由でピクセルを読む
     // ============================================================
-    document.getElementById('btn-extract').addEventListener('click', async () => {
-      const out = document.getElementById('out-extract');
-      out.textContent = '実行中…';
-
+    document.getElementById('btn-blob').addEventListener('click', async () => {
+      const out = document.getElementById('out-blob');
+      out.textContent = '取得中…';
       try {
-        const { url } = await buildNowcastUrl();
+        const now = new Date();
+        const base = new Date(Date.UTC(
+          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+          now.getUTCHours() - 1, 0, 0
+        ));
+        const bt = utcStamp(base);
+        const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
+        const tileX = Math.floor(xExact);
+        const tileY = Math.floor(yExact);
+        const px = Math.floor((xExact - tileX) * 256);
+        const py = Math.floor((yExact - tileY) * 256);
+        const url = `${BASE}/nowc/${bt}/none/${bt}/surf/hrpns/${ZOOM}/${tileX}/${tileY}.png`;
+
+        // fetch → Blob → ObjectURL → img
+        const res = await fetch(url, { cache: 'no-store' });
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
 
         const img = await new Promise((resolve, reject) => {
           const i = new Image();
-          i.crossOrigin = 'anonymous';
           i.onload = () => resolve(i);
-          i.onerror = () => reject(new Error('画像読み込み失敗（CORSまたは404）'));
-          i.src = url;
+          i.onerror = () => reject(new Error('画像読み込み失敗'));
+          i.src = objectUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+
+        const data = ctx.getImageData(px, py, 1, 1).data;
+        URL.revokeObjectURL(objectUrl);
+
+        out.innerHTML =
+          `URL: ${url}\n` +
+          `タイル: ${ZOOM}/${tileX}/${tileY}\n` +
+          `ピクセル: (${px}, ${py})\n` +
+          `RGBA: (${data[0]}, ${data[1]}, ${data[2]}, ${data[3]})\n\n` +
+          (data[3] === 0 ? '→ 透明（降水なし）' : '→ 色あり（降水の可能性）') +
+          `\n\n✅ Blob経由で getImageData 成功（SecurityErrorなし）`;
+      } catch (e) {
+        out.innerHTML = `❌ エラー: ${e.message}`;
+      }
+    });
+
+    // ============================================================
+    // ③ Blob経由で色を抽出
+    // ============================================================
+    document.getElementById('btn-extract').addEventListener('click', async () => {
+      const out = document.getElementById('out-extract');
+      out.textContent = '取得中…';
+      try {
+        const now = new Date();
+        const base = new Date(Date.UTC(
+          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+          now.getUTCHours() - 1, 0, 0
+        ));
+        const bt = utcStamp(base);
+        const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
+        const x = Math.floor(xExact);
+        const y = Math.floor(yExact);
+        const url = `${BASE}/nowc/${bt}/none/${bt}/surf/hrpns/${ZOOM}/${x}/${y}.png`;
+
+        const res = await fetch(url, { cache: 'no-store' });
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('画像読み込み失敗'));
+          i.src = objectUrl;
         });
 
         const canvas = document.createElement('canvas');
@@ -215,20 +301,9 @@
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         ctx.drawImage(img, 0, 0);
 
-        let data;
-        try {
-          data = ctx.getImageData(0, 0, img.width, img.height).data;
-        } catch (e) {
-          out.innerHTML =
-            `❌ getImageData で例外（SecurityError）\n` +
-            `→ canvas が tainted 状態。CORSヘッダーが返っていません。\n\n` +
-            `エラー: ${e.message}\n\n` +
-            `この場合、タイルの色は読み取れず、降水量の算出はできません。\n` +
-            `別の方法（JSON API、プロキシ等）が必要です。`;
-          return;
-        }
+        const data = ctx.getImageData(0, 0, img.width, img.height).data;
+        URL.revokeObjectURL(objectUrl);
 
-        // 色をカウント
         const counts = new Map();
         for (let i = 0; i < data.length; i += 4) {
           const a = data[i + 3];
@@ -259,90 +334,6 @@
       } catch (e) {
         out.innerHTML = `❌ エラー: ${e.message}`;
       }
-    });
-
-    // ============================================================
-    // ③ 特定ピクセルを読み取る（現在地の値）
-    // ============================================================
-    document.getElementById('btn-test-pixel').addEventListener('click', async () => {
-      const out = document.getElementById('out-pixel');
-      out.textContent = '実行中…';
-
-      try {
-        const info = await buildNowcastUrl();
-        const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
-        const px = Math.floor((xExact - info.tileX) * 256);
-        const py = Math.floor((yExact - info.tileY) * 256);
-
-        const img = await new Promise((resolve, reject) => {
-          const i = new Image();
-          i.crossOrigin = 'anonymous';
-          i.onload = () => resolve(i);
-          i.onerror = () => reject(new Error('画像読み込み失敗'));
-          i.src = info.url;
-        });
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-
-        let data;
-        try {
-          data = ctx.getImageData(px, py, 1, 1).data;
-        } catch (e) {
-          out.innerHTML =
-            `❌ getImageData で SecurityError\n` +
-            `→ CORS非対応。ピクセル読み取り不可。\n\nエラー: ${e.message}`;
-          return;
-        }
-
-        out.innerHTML =
-          `座標: ${LAT}, ${LON}\n` +
-          `タイル: ${ZOOM}/${info.tileX}/${info.tileY}\n` +
-          `ピクセル: (${px}, ${py})\n` +
-          `validtime: ${info.validtime}\n` +
-          `RGBA: (${data[0]}, ${data[1]}, ${data[2]}, ${data[3]})\n` +
-          (data[3] === 0 ? '\n→ 透明（降水なし）' : '\n→ 色あり（降水の可能性）');
-      } catch (e) {
-        out.innerHTML = `❌ エラー: ${e.message}`;
-      }
-    });
-
-    // ============================================================
-    // ④ rasrf タイルのURLを総当たりで試す
-    // ============================================================
-    const rasrfBtn = document.createElement('button');
-    rasrfBtn.textContent = '④ rasrf（1〜6時間先）のURLを試す';
-    document.body.appendChild(rasrfBtn);
-    const rasrfOut = document.createElement('div');
-    rasrfOut.className = 'out';
-    rasrfOut.textContent = '未実行';
-    document.body.appendChild(rasrfOut);
-
-    rasrfBtn.addEventListener('click', async () => {
-      rasrfOut.textContent = '実行中…';
-      const candidates = buildRasrfCandidates();
-      const lines = [];
-
-      for (const c of candidates) {
-        lines.push(`試行: basetime=${c.basetime}, validtime=${c.validtime}`);
-        try {
-          const res = await fetch(c.url, { cache: 'no-store', method: 'HEAD' });
-          if (res.ok) {
-            lines.push(`  ✅ HTTP ${res.status} 取得成功`);
-            const acao = res.headers.get('access-control-allow-origin');
-            lines.push(`  Access-Control-Allow-Origin: ${acao ?? '（なし）'}`);
-            break;
-          } else {
-            lines.push(`  ❌ HTTP ${res.status}`);
-          }
-        } catch (e) {
-          lines.push(`  ❌ fetch失敗（CORS or 404）: ${e.message}`);
-        }
-      }
-      rasrfOut.innerHTML = lines.join('\n');
     });
   </script>
 </body>
