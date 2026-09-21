@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>雨ナウ デバッグ</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', sans-serif;
+      background: #f5f7fa;
+      color: #1a1a2e;
+      padding: 16px;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    h1 { font-size: 1.2rem; margin-bottom: 12px; }
+    h2 { font-size: 1rem; margin: 20px 0 8px; color: #0066cc; }
+    button {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: #0066cc;
+      border: none;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      cursor: pointer;
+    }
+    button:active { opacity: 0.8; }
+    button:disabled { background: #9ca3af; }
+    .out {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .ok { color: #059669; font-weight: 700; }
+    .ng { color: #dc2626; font-weight: 700; }
+    .warn { color: #d97706; font-weight: 700; }
+    .label { color: #6b7280; font-size: 11px; text-transform: uppercase; }
+    .swatch {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      vertical-align: middle;
+      border: 1px solid #000;
+      margin-right: 4px;
+    }
+    .color-line {
+      display: flex;
+      align-items: center;
+      padding: 3px 0;
+      gap: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>雨ナウ デバッグ</h1>
+
+  <p style="font-size:12px;color:#6b7280;margin-bottom:16px;">
+    気象庁タイルの CORS と色パレットを実機で確認するためのページです。
+  </p>
+
+  <button id="btn-cors">① CORSヘッダーを確認</button>
+  <div id="out-cors" class="out">未実行</div>
+
+  <button id="btn-extract">② タイルから色を抽出</button>
+  <div id="out-extract" class="out">未実行</div>
+
+  <button id="btn-test-pixel">③ 特定ピクセルを読み取る</button>
+  <div id="out-pixel" class="out">未実行</div>
+
+  <script>
+    // ---- 座標（真庭市役所付近。任意で書き換え） ----
+    const LAT = 35.0756;
+    const LON = 133.7528;
+    const ZOOM = 10;
+
+    const BASE = 'https://www.jma.go.jp/bosai/jmatile/data';
+
+    // ---- 緯度経度 → タイル座標 ----
+    function lonLatToTileExact(lon, lat, z) {
+      const n = 2 ** z;
+      const xExact = ((lon + 180) / 360) * n;
+      const latRad = (lat * Math.PI) / 180;
+      const yExact =
+        ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+      return { xExact, yExact };
+    }
+
+    function utcStamp(d) {
+      return (
+        String(d.getUTCFullYear()) +
+        String(d.getUTCMonth() + 1).padStart(2, '0') +
+        String(d.getUTCDate()).padStart(2, '0') +
+        String(d.getUTCHours()).padStart(2, '0') +
+        String(d.getUTCMinutes()).padStart(2, '0') +
+        String(d.getUTCSeconds()).padStart(2, '0')
+      );
+    }
+
+    // ---- ナウキャストの最新タイルURLを組み立てる ----
+    async function buildNowcastUrl() {
+      const res = await fetch(`${BASE}/nowc/targetTimes_N1.json`, { cache: 'no-store' });
+      const times = await res.json();
+      const nowUtc = utcStamp(new Date());
+      const candidates = times
+        .filter((t) => t.validtime >= nowUtc && t.elements?.includes('hrpns'))
+        .sort((a, b) => a.validtime.localeCompare(b.validtime));
+      if (candidates.length === 0) throw new Error('未来のナウキャスト時刻がありません');
+      const t = candidates[0];
+      const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
+      const x = Math.floor(xExact);
+      const y = Math.floor(yExact);
+      const url = `${BASE}/nowc/${t.basetime}/none/${t.validtime}/surf/hrpns/${ZOOM}/${x}/${y}.png`;
+      return { url, tileX: x, tileY: y, validtime: t.validtime };
+    }
+
+    // ---- rasrf の候補URLを組み立てる（30分刻みで探索） ----
+    function buildRasrfCandidates() {
+      const now = new Date();
+      const baseMs = Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+        now.getUTCHours(), 0, 0
+      );
+      const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
+      const x = Math.floor(xExact);
+      const y = Math.floor(yExact);
+
+      const candidates = [];
+      for (let offset = 0; offset <= 6; offset++) {
+        const ms = baseMs - offset * 30 * 60 * 1000;
+        const rounded = new Date(Math.floor(ms / (30 * 60 * 1000)) * 30 * 60 * 1000);
+        const bt = utcStamp(rounded);
+        const v1 = utcStamp(new Date(rounded.getTime() + 1 * 3600 * 1000));
+        const url = `${BASE}/rasrf/${bt}/none/${v1}/surf/rasrf/${ZOOM}/${x}/${y}.png`;
+        candidates.push({ url, basetime: bt, validtime: v1, tileX: x, tileY: y });
+      }
+      return candidates;
+    }
+
+    // ============================================================
+    // ① CORS ヘッダー確認
+    // ============================================================
+    document.getElementById('btn-cors').addEventListener('click', async () => {
+      const out = document.getElementById('out-cors');
+      out.textContent = '実行中…';
+      const lines = [];
+
+      try {
+        const { url } = await buildNowcastUrl();
+        lines.push(`URL: ${url}`);
+        lines.push('');
+
+        // fetch でヘッダーを見る
+        const res = await fetch(url, { cache: 'no-store' });
+        lines.push(`HTTPステータス: ${res.status}`);
+        lines.push('');
+
+        lines.push('--- レスポンスヘッダー ---');
+        let hasCors = false;
+        for (const [k, v] of res.headers.entries()) {
+          lines.push(`${k}: ${v}`);
+          if (k.toLowerCase() === 'access-control-allow-origin') hasCors = true;
+        }
+
+        lines.push('');
+        if (hasCors) {
+          lines.push('✅ Access-Control-Allow-Origin あり');
+        } else {
+          lines.push('❌ Access-Control-Allow-Origin なし（CORS非対応の可能性）');
+        }
+        lines.push('');
+        lines.push('※ ブラウザのfetchはCORSモード。imgタグで読む場合もcrossOriginで同様の扱いになる。');
+        out.innerHTML = lines.join('\n');
+      } catch (e) {
+        out.innerHTML = `❌ エラー: ${e.message}\n\n` +
+          `※ CORSで弾かれた場合、fetch自体がTypeErrorで失敗する。\n` +
+          `  → タイルはimgタグで表示できるが、canvasでgetImageDataはできない。`;
+      }
+    });
+
+    // ============================================================
+    // ② タイルから色を抽出
+    // ============================================================
+    document.getElementById('btn-extract').addEventListener('click', async () => {
+      const out = document.getElementById('out-extract');
+      out.textContent = '実行中…';
+
+      try {
+        const { url } = await buildNowcastUrl();
+
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.crossOrigin = 'anonymous';
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('画像読み込み失敗（CORSまたは404）'));
+          i.src = url;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+
+        let data;
+        try {
+          data = ctx.getImageData(0, 0, img.width, img.height).data;
+        } catch (e) {
+          out.innerHTML =
+            `❌ getImageData で例外（SecurityError）\n` +
+            `→ canvas が tainted 状態。CORSヘッダーが返っていません。\n\n` +
+            `エラー: ${e.message}\n\n` +
+            `この場合、タイルの色は読み取れず、降水量の算出はできません。\n` +
+            `別の方法（JSON API、プロキシ等）が必要です。`;
+          return;
+        }
+
+        // 色をカウント
+        const counts = new Map();
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3];
+          if (a === 0) continue;
+          const key = `${data[i]},${data[i + 1]},${data[i + 2]}`;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        }
+
+        const sorted = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 20);
+
+        let html = `<div class="label">画像サイズ: ${img.width}×${img.height}</div>`;
+        html += `<div class="label">非透明色の種類: ${counts.size}</div><br>`;
+        if (sorted.length === 0) {
+          html += '（このタイルは全面透明＝降水なし）';
+        } else {
+          html += '<div class="label">出現頻度上位20色:</div>';
+          for (const [rgb, count] of sorted) {
+            const [r, g, b] = rgb.split(',').map(Number);
+            html += `<div class="color-line">` +
+              `<span class="swatch" style="background:rgb(${r},${g},${b})"></span>` +
+              `RGB(${r},${g},${b}) × ${count}` +
+              `</div>`;
+          }
+        }
+        out.innerHTML = html;
+      } catch (e) {
+        out.innerHTML = `❌ エラー: ${e.message}`;
+      }
+    });
+
+    // ============================================================
+    // ③ 特定ピクセルを読み取る（現在地の値）
+    // ============================================================
+    document.getElementById('btn-test-pixel').addEventListener('click', async () => {
+      const out = document.getElementById('out-pixel');
+      out.textContent = '実行中…';
+
+      try {
+        const info = await buildNowcastUrl();
+        const { xExact, yExact } = lonLatToTileExact(LON, LAT, ZOOM);
+        const px = Math.floor((xExact - info.tileX) * 256);
+        const py = Math.floor((yExact - info.tileY) * 256);
+
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.crossOrigin = 'anonymous';
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('画像読み込み失敗'));
+          i.src = info.url;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+
+        let data;
+        try {
+          data = ctx.getImageData(px, py, 1, 1).data;
+        } catch (e) {
+          out.innerHTML =
+            `❌ getImageData で SecurityError\n` +
+            `→ CORS非対応。ピクセル読み取り不可。\n\nエラー: ${e.message}`;
+          return;
+        }
+
+        out.innerHTML =
+          `座標: ${LAT}, ${LON}\n` +
+          `タイル: ${ZOOM}/${info.tileX}/${info.tileY}\n` +
+          `ピクセル: (${px}, ${py})\n` +
+          `validtime: ${info.validtime}\n` +
+          `RGBA: (${data[0]}, ${data[1]}, ${data[2]}, ${data[3]})\n` +
+          (data[3] === 0 ? '\n→ 透明（降水なし）' : '\n→ 色あり（降水の可能性）');
+      } catch (e) {
+        out.innerHTML = `❌ エラー: ${e.message}`;
+      }
+    });
+
+    // ============================================================
+    // ④ rasrf タイルのURLを総当たりで試す
+    // ============================================================
+    const rasrfBtn = document.createElement('button');
+    rasrfBtn.textContent = '④ rasrf（1〜6時間先）のURLを試す';
+    document.body.appendChild(rasrfBtn);
+    const rasrfOut = document.createElement('div');
+    rasrfOut.className = 'out';
+    rasrfOut.textContent = '未実行';
+    document.body.appendChild(rasrfOut);
+
+    rasrfBtn.addEventListener('click', async () => {
+      rasrfOut.textContent = '実行中…';
+      const candidates = buildRasrfCandidates();
+      const lines = [];
+
+      for (const c of candidates) {
+        lines.push(`試行: basetime=${c.basetime}, validtime=${c.validtime}`);
+        try {
+          const res = await fetch(c.url, { cache: 'no-store', method: 'HEAD' });
+          if (res.ok) {
+            lines.push(`  ✅ HTTP ${res.status} 取得成功`);
+            const acao = res.headers.get('access-control-allow-origin');
+            lines.push(`  Access-Control-Allow-Origin: ${acao ?? '（なし）'}`);
+            break;
+          } else {
+            lines.push(`  ❌ HTTP ${res.status}`);
+          }
+        } catch (e) {
+          lines.push(`  ❌ fetch失敗（CORS or 404）: ${e.message}`);
+        }
+      }
+      rasrfOut.innerHTML = lines.join('\n');
+    });
+  </script>
+</body>
+</html>
