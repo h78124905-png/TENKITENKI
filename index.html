@@ -123,7 +123,7 @@
       <h1>雨ナウ</h1>
       <p id="last-updated">最終更新: --:--</p>
       <p id="location-info"></p>
-      <p id="version-info">v10</p>
+      <p id="version-info">v14</p>
     </header>
 
     <div id="summary" class="summary hidden"></div>
@@ -145,9 +145,10 @@
 
   <script>
     // ---- 定数 ----
-    const CACHE_KEY = 'rain-now-cache-v10';
+    const CACHE_KEY = 'rain-now-cache-v14';
     const BASE_NOWC = 'https://www.jma.go.jp/bosai/jmatile/data';
     const TARGET_TIMES_N1 = `${BASE_NOWC}/nowc/targetTimes_N1.json`;
+    const TARGET_TIMES_RASRF = `${BASE_NOWC}/rasrf/targetTimes.json`;
     const ZOOM = 10;
 
     // ---- DOM ----
@@ -350,51 +351,50 @@
       );
     }
 
-    // ---- 降水短時間予報取得（1〜6時間先・1時間刻み） ----
+    // ---- 降水短時間予報取得（targetTimes.json ベース） ----
     async function fetchExtendedForecast(lat, lon) {
+      // 1. 利用可能なbasetime/validtimeの一覧を取得
+      const res = await fetch(TARGET_TIMES_RASRF, { cache: 'no-store' });
+      if (!res.ok) throw new Error('rasrf targetTimes 取得失敗');
+      const times = await res.json();
+      if (!Array.isArray(times) || times.length === 0) {
+        throw new Error('rasrf時刻リストが空です');
+      }
+
+      // 2. 最新のbasetimeを取得
+      const latest = times.reduce((a, b) => (a.basetime > b.basetime ? a : b));
+      const basetime = latest.basetime;
+      console.log('[rasrf] 最新basetime:', basetime, '(JST', formatStampJst(basetime) + ')');
+
+      // 3. 同じbasetimeのエントリをvalidtime昇順で抽出
+      const entries = times
+        .filter((t) => t.basetime === basetime && t.elements?.includes('rasrf'))
+        .sort((a, b) => a.validtime.localeCompare(b.validtime));
+
+      if (entries.length === 0) {
+        throw new Error('該当basetimeのエントリがありません');
+      }
+
+      // 4. basetimeから+1h〜+6hのvalidtimeを抽出
+      const btDate = parseUtcStamp(basetime);
+      const targets = [];
+      for (let h = 1; h <= 6; h++) {
+        const vtDate = new Date(btDate.getTime() + h * 3600000);
+        const vt = utcStamp(vtDate);
+        const found = entries.find((e) => e.validtime === vt);
+        if (found) targets.push({ basetime, validtime: vt });
+      }
+
+      if (targets.length === 0) {
+        throw new Error('該当する予報時刻がありません');
+      }
+
+      // 5. タイル取得
       const { xExact, yExact } = lonLatToTileExact(lon, lat, ZOOM);
       const tileX = Math.floor(xExact);
       const tileY = Math.floor(yExact);
       const px = Math.floor((xExact - tileX) * 256);
       const py = Math.floor((yExact - tileY) * 256);
-
-      const now = new Date();
-      const nowMs = now.getTime();
-
-      const candidates = [];
-      const baseHourMs = Math.floor(nowMs / 3600000) * 3600000;
-      for (let h = 0; h <= 8; h++) {
-        for (const offsetMin of [0, 30]) {
-          const ms = baseHourMs - h * 3600000 + offsetMin * 60000;
-          if (ms > nowMs) continue;
-          candidates.push(new Date(ms));
-        }
-      }
-      candidates.sort((a, b) => b.getTime() - a.getTime());
-
-      const attempts = [];
-      let chosen = null;
-      for (const btDate of candidates) {
-        const bt = utcStamp(btDate);
-        const vtDate = new Date(btDate.getTime() + 3600000);
-        const vt = utcStamp(vtDate);
-        const url = `${BASE_NOWC}/rasrf/${bt}/none/${vt}/surf/rasrf/${ZOOM}/${tileX}/${tileY}.png`;
-        try {
-          const res = await fetch(url, { cache: 'no-store', method: 'GET' });
-          attempts.push(`${bt}:${res.status}`);
-          if (res.ok) { chosen = { bt, btDate }; break; }
-        } catch (e) {
-          attempts.push(`${bt}:ERR`);
-        }
-      }
-      console.log('[rasrf探索]', attempts.join(' | '));
-      if (!chosen) throw new Error('rasrf見つからず: ' + attempts.slice(0, 10).join(', '));
-
-      const targets = [];
-      for (let h = 1; h <= 6; h++) {
-        const vtDate = new Date(chosen.btDate.getTime() + h * 3600000);
-        targets.push({ basetime: chosen.bt, validtime: utcStamp(vtDate) });
-      }
 
       return Promise.all(
         targets.map(async (t) => {
@@ -547,7 +547,6 @@
 
     // ---- 拡張予報ボタン ----
     extendBtn.addEventListener('click', async () => {
-      // 表示中なら隠すだけ
       if (extendedVisible) {
         extendedVisible = false;
         extendedCard.classList.add('hidden');
@@ -555,7 +554,6 @@
         return;
       }
 
-      // 位置情報が未取得なら取得
       if (currentLat == null || currentLon == null) {
         try {
           const pos = await getPosition();
@@ -568,7 +566,6 @@
         }
       }
 
-      // ★ 常に最新を取得（キャッシュは失敗時のみ使用）
       extendBtn.disabled = true;
       extendBtn.textContent = '取得中…';
       try {
