@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0066cc" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <title>雨ナウ</title>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>雨ナウ</h1>
+      <p id="last-updated">最終更新: --:--</p>
+    </header>
+
+    <div id="summary" class="summary hidden"></div>
+
+    <button id="refresh-btn" class="refresh-btn">
+      🔄 更新
+    </button>
+
+    <div id="list-container">
+      <p class="empty-message">更新ボタンを押すと、現在地の5分ごとの降水量を表示します。</p>
+    </div>
+
+    <footer>
+      <p class="attribution">気象データ © Japan Meteorological Agency</p>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
