@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rain-now-v9';
+const CACHE_NAME = 'rain-now-cache';
 const APP_SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
