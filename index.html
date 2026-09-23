@@ -123,7 +123,7 @@
       <h1>雨ナウ</h1>
       <p id="last-updated">最終更新: --:--</p>
       <p id="location-info"></p>
-      <p id="version-info">v16</p>
+      <p id="version-info">v17</p>
     </header>
 
     <div id="summary" class="summary hidden"></div>
@@ -147,7 +147,7 @@
 
   <script>
     // ---- 定数 ----
-    const CACHE_KEY = 'rain-now-cache-v16';
+    const CACHE_KEY = 'rain-now-cache-v17';
     const BASE_NOWC = 'https://www.jma.go.jp/bosai/jmatile/data';
     const TARGET_TIMES_N1 = `${BASE_NOWC}/nowc/targetTimes_N1.json`;
     const TARGET_TIMES_RASRF = `${BASE_NOWC}/rasrf/targetTimes.json`;
@@ -314,10 +314,22 @@
       );
     }
 
+    // ---- キャッシュバスター付きfetch（失敗時はバスターなしで再試行） ----
+    async function fetchWithBuster(url) {
+      try {
+        const res = await fetch(url + '?_=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) return res;
+        console.warn('[fetch] buster付き失敗:', res.status, url);
+      } catch (e) {
+        console.warn('[fetch] buster付き例外:', e.message, url);
+      }
+      // フォールバック: キャッシュバスターなし
+      return fetch(url, { cache: 'no-store' });
+    }
+
     // ---- ナウキャスト取得（0〜60分・10分刻み） ----
     async function fetchNowcastForecast(lat, lon) {
-      // ★ キャッシュバスターを付与
-      const res = await fetch(TARGET_TIMES_N1 + '?_=' + Date.now(), { cache: 'no-store' });
+      const res = await fetchWithBuster(TARGET_TIMES_N1);
       if (!res.ok) throw new Error('時刻リストの取得に失敗');
       const times = await res.json();
       if (!Array.isArray(times) || times.length === 0) {
@@ -356,8 +368,7 @@
 
     // ---- 降水短時間予報取得（targetTimes.json ベース） ----
     async function fetchExtendedForecast(lat, lon) {
-      // ★ キャッシュバスターを付与
-      const res = await fetch(TARGET_TIMES_RASRF + '?_=' + Date.now(), { cache: 'no-store' });
+      const res = await fetchWithBuster(TARGET_TIMES_RASRF);
       if (!res.ok) throw new Error('rasrf targetTimes 取得失敗');
       const times = await res.json();
       if (!Array.isArray(times) || times.length === 0) {
@@ -511,7 +522,6 @@
         currentLon = longitude;
         locationInfoEl.textContent = `📍 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 
-        // ナウキャストと拡張予報を並列取得
         const [forecast, newExtended] = await Promise.all([
           fetchNowcastForecast(latitude, longitude),
           fetchExtendedForecast(latitude, longitude).catch((e) => {
@@ -566,7 +576,6 @@
         }
       }
 
-      // 拡張予報が未取得なら取得
       if (!extendedForecast) {
         extendBtn.disabled = true;
         extendBtn.textContent = '取得中…';
