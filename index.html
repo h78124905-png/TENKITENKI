@@ -123,7 +123,7 @@
       <h1>雨ナウ</h1>
       <p id="last-updated">最終更新: --:--</p>
       <p id="location-info"></p>
-      <p id="version-info">v15</p>
+      <p id="version-info">v16</p>
     </header>
 
     <div id="summary" class="summary hidden"></div>
@@ -147,7 +147,7 @@
 
   <script>
     // ---- 定数 ----
-    const CACHE_KEY = 'rain-now-cache-v15';
+    const CACHE_KEY = 'rain-now-cache-v16';
     const BASE_NOWC = 'https://www.jma.go.jp/bosai/jmatile/data';
     const TARGET_TIMES_N1 = `${BASE_NOWC}/nowc/targetTimes_N1.json`;
     const TARGET_TIMES_RASRF = `${BASE_NOWC}/rasrf/targetTimes.json`;
@@ -316,7 +316,8 @@
 
     // ---- ナウキャスト取得（0〜60分・10分刻み） ----
     async function fetchNowcastForecast(lat, lon) {
-      const res = await fetch(TARGET_TIMES_N1, { cache: 'no-store' });
+      // ★ キャッシュバスターを付与
+      const res = await fetch(TARGET_TIMES_N1 + '?_=' + Date.now(), { cache: 'no-store' });
       if (!res.ok) throw new Error('時刻リストの取得に失敗');
       const times = await res.json();
       if (!Array.isArray(times) || times.length === 0) {
@@ -355,7 +356,8 @@
 
     // ---- 降水短時間予報取得（targetTimes.json ベース） ----
     async function fetchExtendedForecast(lat, lon) {
-      const res = await fetch(TARGET_TIMES_RASRF, { cache: 'no-store' });
+      // ★ キャッシュバスターを付与
+      const res = await fetch(TARGET_TIMES_RASRF + '?_=' + Date.now(), { cache: 'no-store' });
       if (!res.ok) throw new Error('rasrf targetTimes 取得失敗');
       const times = await res.json();
       if (!Array.isArray(times) || times.length === 0) {
@@ -364,6 +366,7 @@
 
       const latest = times.reduce((a, b) => (a.basetime > b.basetime ? a : b));
       const basetime = latest.basetime;
+      console.log('[rasrf] 最新basetime:', basetime, '(JST', formatStampJst(basetime) + ')');
 
       const entries = times
         .filter((t) => t.basetime === basetime && t.elements?.includes('rasrf'))
@@ -508,12 +511,12 @@
         currentLon = longitude;
         locationInfoEl.textContent = `📍 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 
-        // ナウキャスト（0〜60分）と拡張予報（1〜6時間先）を並列取得
+        // ナウキャストと拡張予報を並列取得
         const [forecast, newExtended] = await Promise.all([
           fetchNowcastForecast(latitude, longitude),
           fetchExtendedForecast(latitude, longitude).catch((e) => {
             console.warn('拡張予報の取得失敗:', e.message);
-            return extendedForecast; // 失敗時は前回のデータを維持
+            return extendedForecast;
           })
         ]);
 
